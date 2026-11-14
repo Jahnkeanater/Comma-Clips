@@ -52,7 +52,10 @@ fun DriveScreen(repo: Repo, routeName: String, showExports: () -> Unit) {
   val player = remember {
     ExoPlayer.Builder(ctx).setMediaSourceFactory(DefaultMediaSourceFactory(SftpDataSource.Factory(repo))).build().apply {
       setMediaItems(previews.map { MediaItem.fromUri(SftpDataSource.uri(route.name, it, "qcamera.ts")) })
-      volume = 0f
+      // the preview files carry the cabin audio the comma records; pause other apps' audio while playing
+      setAudioAttributes(androidx.media3.common.AudioAttributes.Builder()
+        .setUsage(androidx.media3.common.C.USAGE_MEDIA).setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
+      volume = if (prefs.muted) 0f else 1f
       prepare()
     }
   }
@@ -86,6 +89,7 @@ fun DriveScreen(repo: Repo, routeName: String, showExports: () -> Unit) {
   var fast by remember { mutableStateOf(prefs.fastMode) }
   var quality by remember { mutableIntStateOf(prefs.quality) }
   var hud by remember { mutableStateOf(prefs.hud) }
+  var muted by remember { mutableStateOf(prefs.muted) }
   var message by remember { mutableStateOf<String?>(null) }
   val scope = rememberCoroutineScope()
 
@@ -108,6 +112,12 @@ fun DriveScreen(repo: Repo, routeName: String, showExports: () -> Unit) {
         layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
       } }, modifier = Modifier.fillMaxSize())
       if (hud) PreviewHud(tel[curSeg], now, units, telErr.value)
+      Surface(onClick = { muted = !muted; prefs.muted = muted; player.volume = if (muted) 0f else 1f },
+        shape = RoundedCornerShape(50), color = Color(0x99000000),
+        modifier = Modifier.align(Alignment.TopCenter).padding(8.dp)) {
+        Text(if (muted) "🔇 Muted" else "🔊 Sound on", color = Color.White, fontSize = 12.sp,
+          modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
+      }
     }
 
     Column(Modifier.padding(16.dp)) {

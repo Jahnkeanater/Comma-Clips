@@ -37,6 +37,9 @@ class Prefs(context: Context) {
   var quality: Int  // 0 high, 1 medium, 2 small
     get() = p.getInt("quality", 0)
     set(v) = p.edit().putInt("quality", v).apply()
+  var muted: Boolean
+    get() = p.getBoolean("muted", false)
+    set(v) = p.edit().putBoolean("muted", v).apply()
   var hud: Boolean
     get() = p.getBoolean("hud", false)
     set(v) = p.edit().putBoolean("hud", v).apply()
