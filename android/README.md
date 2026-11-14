@@ -8,7 +8,7 @@ A standalone Android app: the phone talks to the comma directly over Wi-Fi. No c
   - copies the full-resolution road, wide or driver video to the phone and joins the 1-minute segments
   - **Exact cut** re-encodes to H.264 on the phone's hardware encoder
   - **Fast copy** keeps the original HEVC
-  - optional telemetry overlay (speed, lead car, acceleration, steering with comma's wheel icon)
+  - optional telemetry overlay; each element can be switched on or off: speed, gas/brake dot, engaged, clock, GPS (off by default), heading, altitude, turn signals, lead car, acceleration, steering angle, steering wheel, g-force
   - clips are saved to **Movies/Comma Clips** and can be shared from the app
   - exports keep running with the screen off
 - **Connection:**

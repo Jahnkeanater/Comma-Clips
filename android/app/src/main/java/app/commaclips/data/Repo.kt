@@ -134,7 +134,9 @@ class Repo(private val ctx: Context) {
     val todo = ArrayList<Int>()
     for (s in segs) {
       val f = File(dir, "$s.json")
-      if (f.exists()) runCatching { result[s] = SegmentTelemetry.parse(JSONObject(f.readText())) }.onFailure { todo.add(s) } else todo.add(s)
+      // older caches lack GPS, blinkers, pedals and g-force: read those segments again
+      val cached = if (f.exists()) runCatching { SegmentTelemetry.parse(JSONObject(f.readText())) }.getOrNull() else null
+      if (cached != null && cached.format >= 2) result[s] = cached else todo.add(s)
     }
     progress(result.size, segs.size)
     if (todo.isEmpty()) return result

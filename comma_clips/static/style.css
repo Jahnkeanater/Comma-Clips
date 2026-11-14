@@ -138,3 +138,13 @@ details.others summary { color: var(--muted); font-size: 13px; padding: 8px 0; c
 .welcome { border-color: var(--accent); }
 .welcome p { margin: 6px 0; color: var(--muted); }
 .welcome b { color: var(--text); }
+
+/* overlay element checklist */
+.checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; margin-top: 4px; }
+.checks label { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 14px; padding: 6px 0; margin: 0; }
+.checks input { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+.hud-c { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; pointer-events: none; }
+.hud-c span { font-size: 22px; line-height: 1; color: rgba(255,255,255,.25); text-shadow: 0 1px 2px rgba(0,0,0,.8); }
+.hud-c span.on { color: #66e07a; }
+.ped { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.5); margin-left: 6px; vertical-align: middle; }
+.ped.gas { background: #66e07a; border-color: #66e07a; } .ped.brake { background: #ff5a5a; border-color: #ff5a5a; }

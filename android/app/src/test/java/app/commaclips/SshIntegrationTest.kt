@@ -75,6 +75,10 @@ class SshIntegrationTest {
       val s = tel.sample(tel.frameMono(600)!!)
       println("telemetry frames=${st.frames["road"]?.size} samples=${st.t.size} at 30s: $s wall=${tel.wallMillis(tel.frameMono(0)!!)}")
       assertNotNull(s)
+      assertEquals(2, st.format)
+      assertEquals(st.t.size, st.ay.size); assertEquals(st.t.size, st.blink.size); assertEquals(st.t.size, st.lat.size)
+      val withFix = st.lat.count { !it.isNaN() }
+      println("format ${st.format}: gps fixes $withFix/${st.t.size}, blinker samples ${st.blink.count { it != 0 }}, pedal samples ${st.ped.count { it != 0 }}, max |g| ${"%.2f".format(st.ay.filter { !it.isNaN() }.maxOfOrNull { kotlin.math.abs(it) / 9.81f } ?: 0f)}")
     }
   }
 }

@@ -179,8 +179,9 @@ def fetch_telemetry(route: str, segs: list[int], allow_onroad=False, progress=No
   result, todo = {}, []
   for s in segs:
     f = cache / f"{s}.json"
-    if f.exists():
-      result[s] = json.loads(f.read_text())
+    d = json.loads(f.read_text()) if f.exists() else None
+    if d is not None and d.get("v_fmt", 1) >= 2:  # older caches lack GPS, blinkers, pedals, g-force
+      result[s] = d
     else:
       todo.append(s)
   if progress:

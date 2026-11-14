@@ -2,6 +2,7 @@ package app.commaclips.ui
 
 import android.view.ViewGroup
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -91,6 +92,7 @@ fun DriveScreen(repo: Repo, routeName: String, showExports: () -> Unit) {
   var hud by remember { mutableStateOf(prefs.hud) }
   var muted by remember { mutableStateOf(prefs.muted) }
   var withAudio by remember { mutableStateOf(prefs.exportAudio) }
+  var elements by remember { mutableStateOf(prefs.elements) }
   var message by remember { mutableStateOf<String?>(null) }
   val scope = rememberCoroutineScope()
 
@@ -112,7 +114,7 @@ fun DriveScreen(repo: Repo, routeName: String, showExports: () -> Unit) {
         this.player = player
         layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
       } }, modifier = Modifier.fillMaxSize())
-      if (hud) PreviewHud(tel[curSeg], now, units, telErr.value)
+      if (hud) PreviewHud(tel[curSeg], now, units, telErr.value, elements)
       Surface(onClick = { muted = !muted; prefs.muted = muted; player.volume = if (muted) 0f else 1f },
         shape = RoundedCornerShape(50), color = Color(0x99000000),
         modifier = Modifier.align(Alignment.TopCenter).padding(8.dp)) {
@@ -158,6 +160,9 @@ fun DriveScreen(repo: Repo, routeName: String, showExports: () -> Unit) {
           withAudio = it; prefs.exportAudio = it
         }
         if (osd || hud) {
+          Hint("Show on the video", Modifier.padding(top = 4.dp))
+          ElementChecklist(elements) { elements = it; prefs.elements = it }
+          Hint("GPS position is off by default: it shows exactly where you were.")
           Hint("Units", Modifier.padding(top = 4.dp))
           Segmented(listOf(Units.MPH to "mph", Units.KMH to "km/h"), units) { units = it; prefs.units = it }
         }
@@ -174,7 +179,7 @@ fun DriveScreen(repo: Repo, routeName: String, showExports: () -> Unit) {
         }
         SwitchRow("Show telemetry on preview", "Reads the drive logs from the comma (only while parked)", hud) { hud = it; prefs.hud = it }
         Button(onClick = {
-          Jobs.add(ExportParams(route.name, start, end, camera, osd, units, fast && !osd, quality, withAudio))
+          Jobs.add(ExportParams(route.name, start, end, camera, osd, units, fast && !osd, quality, withAudio, elements))
           ExportService.start(ctx)
           message = "Export started"
         }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Export full-resolution clip") }
@@ -239,8 +244,19 @@ private fun Timeline(route: Route, camera: Camera, now: Double, start: Double, e
   }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun BoxScope.PreviewHud(seg: SegmentTelemetry?, now: Double, units: Units, err: String?) {
+private fun ElementChecklist(selected: Set<Element>, onChange: (Set<Element>) -> Unit) {
+  FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    for (e in Element.entries) {
+      FilterChip(selected = e in selected, onClick = { onChange(if (e in selected) selected - e else selected + e) },
+        label = { Text(e.label, fontSize = 13.sp) })
+    }
+  }
+}
+
+@Composable
+private fun BoxScope.PreviewHud(seg: SegmentTelemetry?, now: Double, units: Units, err: String?, el: Set<Element>) {
   val style = androidx.compose.ui.text.TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 13.sp)
   val box = Modifier.padding(8.dp).background(Color(0x61000000), RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 6.dp)
   if (seg == null) {
@@ -250,13 +266,38 @@ private fun BoxScope.PreviewHud(seg: SegmentTelemetry?, now: Double, units: Unit
   val t = Telemetry(mapOf(seg.seg to seg), listOf(seg.seg), "road")
   val frame = ((now - n * DevicePaths.SEG_SECONDS) * DevicePaths.FPS).toInt()
   val s = t.frameMono(frame)?.let { t.sample(it) } ?: return
+  val green = Color(0xFF7AE066)
   Column(box.align(Alignment.TopStart)) {
-    Text("${"%.0f".format(s.speed * units.speedK)} ${units.speedU}", style = style.copy(fontSize = 22.sp))
-    if (s.engaged) Text("● engaged", style = style.copy(color = Color(0xFF7AE066)))
+    if (Element.SPEED in el) Row(verticalAlignment = Alignment.CenterVertically) {
+      Text("${"%.0f".format(s.speed * units.speedK)} ${units.speedU}", style = style.copy(fontSize = 22.sp))
+      if (Element.PEDALS in el) {
+        val c = when (s.pedal) { 2 -> Color(0xFFFF5A5A); 1 -> green; else -> Color.Transparent }
+        Box(Modifier.padding(start = 6.dp).size(10.dp).background(c, androidx.compose.foundation.shape.CircleShape)
+          .border(1.5.dp, if (s.pedal == 0) Color(0x80FFFFFF) else c, androidx.compose.foundation.shape.CircleShape))
+      }
+    }
+    if (Element.ENGAGED in el) Text(if (s.engaged) "● engaged" else "○ not engaged", style = style.copy(color = if (s.engaged) green else Color(0xFFB0B0B0)))
+    if (Element.GPS in el) Text(if (s.lat != null && s.lon != null) "%.6f, %.6f".format(java.util.Locale.US, s.lat, s.lon) else "no GPS fix", style = style)
+    val ha = buildList {
+      if (Element.HEADING in el) add(s.heading?.let { "${compass(it)} ${"%.0f".format(it)}°" } ?: "--")
+      if (Element.ALTITUDE in el) add(s.alt?.let { "${"%.0f".format(it * units.distK)} ${units.distU}" } ?: "--")
+    }
+    if (ha.isNotEmpty()) Text(ha.joinToString(" · "), style = style)
   }
-  Column(box.align(Alignment.TopEnd), horizontalAlignment = Alignment.End) {
-    Text(if (s.leadOn) "LEAD ${"%.0f".format(s.leadSpeed * units.speedK)} ${units.speedU} · ${"%.0f".format(s.leadDist * units.distK)} ${units.distU}" else "LEAD —", style = style)
-    Text("ACCEL ${signed(s.accel, 1)} m/s²", style = style)
-    Text("STEER ${signed(s.steer, 0)}°", style = style)
+  if (Element.BLINKERS in el) {
+    val flash = (System.currentTimeMillis() / 350) % 2 == 0L
+    Row(Modifier.align(Alignment.TopCenter).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+      Text("◀", style = style.copy(fontSize = 22.sp, color = if ((s.blink and 1) != 0 && flash) green else Color(0x40FFFFFF)))
+      Text("▶", style = style.copy(fontSize = 22.sp, color = if ((s.blink and 2) != 0 && flash) green else Color(0x40FFFFFF)))
+    }
+  }
+  val right = buildList {
+    if (Element.LEAD in el) add(if (s.leadOn) "LEAD ${"%.0f".format(s.leadSpeed * units.speedK)} ${units.speedU} · ${"%.0f".format(s.leadDist * units.distK)} ${units.distU}" else "LEAD —")
+    if (Element.ACCEL in el) add("ACCEL ${signed(s.accel, 1)} m/s²")
+    if (Element.STEER in el) add("STEER ${signed(s.steer, 0)}°")
+    if (Element.GFORCE in el) add("%.2f g".format(kotlin.math.hypot(s.latAccel / 9.81f, s.accel / 9.81f)))
+  }
+  if (right.isNotEmpty()) Column(box.align(Alignment.TopEnd), horizontalAlignment = Alignment.End) {
+    for (t in right) Text(t, style = style)
   }
 }

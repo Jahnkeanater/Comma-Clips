@@ -10,10 +10,12 @@ Browse the drives stored on your comma device and export full-resolution clips, 
 - **Export**: a single MP4 from the full-resolution road, wide or driver camera, joined across the device's 1-minute segments.
   - *Exact cut* re-encodes to H.264 so the clip plays anywhere.
   - *Fast copy* keeps the original HEVC (no quality loss, very quick) and starts at the nearest keyframe.
-- **Telemetry overlay** (toggle per export):
-  - top left: speed, engaged status and clock
+- **Telemetry overlay** (toggle per export, and each element can be switched on or off):
+  - top left: speed with a gas (green) / brake (red) dot, engaged status, clock, GPS position, heading and altitude
+  - top centre: turn signals, flashing while on
   - top right: lead car speed and distance, acceleration and steering angle
-  - below that: comma's steering wheel icon, turning with the real wheel
+  - below that: a g-force dot and comma's steering wheel icon, turning with the real wheel
+  - GPS position is off by default, since it shows exactly where you were
 - **Telemetry preview**: the same readout live on the preview player.
 - **Connection screen**:
   - search your network for the comma, or enter its IP or `comma-xxxxxxxx.local` name

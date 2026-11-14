@@ -6,11 +6,26 @@ const store = {
   set(k, v) { try { localStorage.setItem("cc_" + k, JSON.stringify(v)); } catch {} },
 };
 
+const ELEMENTS = [
+  ["speed", "Speed", true], ["pedals", "Gas/brake dot", true], ["engaged", "Engaged", true], ["clock", "Date & time", true],
+  ["gps", "GPS position", false], ["heading", "Heading", true], ["altitude", "Altitude", true], ["blinkers", "Turn signals", true],
+  ["lead", "Lead car", true], ["accel", "Acceleration", true], ["steer", "Steering angle", true], ["wheel", "Steering wheel", true],
+  ["gforce", "G-force", true],
+];
+const COMPASS = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+const compass = (d) => COMPASS[Math.round(((d % 360) + 360) % 360 / 22.5) % 16];
 const state = {
   routes: [], route: null, playable: [], sel: { start: 0, end: 0 },
   opts: Object.assign({ camera: "road", osd: true, units: "mph", mode: "exact", quality: "high", hud: false, audio: true }, store.get("opts", {})),
   tel: new Map(), telLoading: new Set(), hls: null, tab: "drives",
 };
+state.opts.elements = Object.assign(Object.fromEntries(ELEMENTS.map(([k, , d]) => [k, d])), state.opts.elements || {});
+const elOn = (k) => state.opts.elements[k] !== false;
+$("elementChecks").innerHTML = ELEMENTS.map(([k, label]) => `<label><input type="checkbox" data-el="${k}"> ${label}</label>`).join("");
+$("elementChecks").addEventListener("change", (e) => {
+  const k = e.target.dataset.el; if (!k) return;
+  state.opts.elements[k] = e.target.checked; syncOpts(); if (state.opts.hud && state.route) updateHead();
+});
 
 async function api(path, opts) {
   const r = await fetch(path, opts);
@@ -224,6 +239,8 @@ function syncOpts() {
   $("modeCtl").querySelector('[data-v="fast"]').disabled = o.osd;
   $("osdToggle").checked = o.osd;
   $("audioToggle").checked = o.audio !== false;
+  $("elementChecks").querySelectorAll("input").forEach((c) => (c.checked = elOn(c.dataset.el)));
+  $("elementsField").classList.toggle("hidden", !o.osd && !o.hud);
   $("hudToggle").checked = o.hud;
   $("unitsField").classList.toggle("hidden", !o.osd && !o.hud);
   $("qualityField").classList.toggle("hidden", o.mode === "fast");
@@ -241,7 +258,8 @@ $("exportBtn").onclick = async () => {
     const o = state.opts;
     await api("/api/export", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ route: state.route.name, start: state.sel.start, end: state.sel.end, camera: o.camera,
-        osd: o.osd, units: o.units, mode: o.mode, quality: o.quality, audio: o.audio !== false }) });
+        osd: o.osd, units: o.units, mode: o.mode, quality: o.quality, audio: o.audio !== false,
+        elements: ELEMENTS.map(([k]) => k).filter(elOn) }) });
     msg.innerHTML = `Export started. <a href="#/exports">See progress</a>`;
     pollJobs();
   } catch (e) { msg.textContent = "Export failed: " + e.message; }
@@ -257,7 +275,7 @@ async function loadTel(seg) {
   state.telLoading.delete(seg);
 }
 function drawHud(rt) {
-  const hud = $("hud"), L_ = $("hudL"), R_ = $("hudR"), seg = Math.floor(rt / SEG), d = state.tel.get(seg);
+  const hud = $("hud"), L_ = $("hudL"), R_ = $("hudR"), C_ = $("hudC"), seg = Math.floor(rt / SEG), d = state.tel.get(seg);
   hud.classList.remove("hidden");
   loadTel(seg); if (rt % SEG > 45) loadTel(seg + 1);
   if (!d) { L_.textContent = "loading telemetry…"; R_.textContent = ""; return; }
@@ -270,10 +288,25 @@ function drawHud(rt) {
   const mph = state.opts.units !== "kmh", k = mph ? 2.23694 : 3.6, u = mph ? "mph" : "km/h";
   const L = d.lead[lo];
   const sgn = (x, n) => { const v = Number(x.toFixed(n)) + 0; return (v > 0 ? "+" : "") + v.toFixed(n); };
-  L_.innerHTML = `<div class="spd">${Math.round(d.v[lo] * k)} <span class="unit">${u}</span></div>${d.eng[lo] ? "● engaged" : ""}`;
-  R_.innerHTML = `LEAD ${L[0] ? Math.round(L[1] * k) + " " + u + " · " + Math.round(L[2] * (mph ? 3.28084 : 1)) + (mph ? " ft" : " m") : "—"}<br>
-    ACCEL ${sgn(d.a[lo], 1)} m/s²<br>
-    STEER ${sgn(d.steer[lo], 0)}°`;
+  const at = (key) => (d[key] ? d[key][lo] : null);
+  const ped = at("ped"), blink = at("blink") || 0, lat = at("lat"), lon = at("lon"), alt = at("alt"), hdg = at("hdg"), ay = at("ay");
+  const left = [];
+  if (elOn("speed")) left.push(`<div class="spd">${Math.round(d.v[lo] * k)} <span class="unit">${u}</span>${elOn("pedals") ? `<span class="ped ${ped === 2 ? "brake" : ped === 1 ? "gas" : ""}"></span>` : ""}</div>`);
+  if (elOn("engaged")) left.push(d.eng[lo] ? "● engaged" : "○ not engaged");
+  if (elOn("gps")) left.push(lat != null ? `${lat.toFixed(6)}, ${lon.toFixed(6)}` : "no GPS fix");
+  const ha = [];
+  if (elOn("heading")) ha.push(hdg != null ? `${compass(hdg)} ${Math.round(hdg)}°` : "--");
+  if (elOn("altitude")) ha.push(alt != null ? `${Math.round(alt * (mph ? 3.28084 : 1))} ${mph ? "ft" : "m"}` : "--");
+  if (ha.length) left.push(ha.join(" · "));
+  L_.innerHTML = left.map((x) => (x.startsWith("<div") ? x : `<div>${x}</div>`)).join("");
+  const flash = Math.floor(Date.now() / 350) % 2 === 0;
+  C_.innerHTML = elOn("blinkers") ? `<span class="${blink & 1 && flash ? "on" : ""}">◀</span><span class="${blink & 2 && flash ? "on" : ""}">▶</span>` : "";
+  const right = [];
+  if (elOn("lead")) right.push(`LEAD ${L[0] ? Math.round(L[1] * k) + " " + u + " · " + Math.round(L[2] * (mph ? 3.28084 : 1)) + (mph ? " ft" : " m") : "—"}`);
+  if (elOn("accel")) right.push(`ACCEL ${sgn(d.a[lo], 1)} m/s²`);
+  if (elOn("steer")) right.push(`STEER ${sgn(d.steer[lo], 0)}°`);
+  if (elOn("gforce")) right.push(`${Math.hypot((ay || 0) / 9.81, d.a[lo] / 9.81).toFixed(2)} g`);
+  R_.innerHTML = right.join("<br>");
 }
 
 // ---------- exports ----------

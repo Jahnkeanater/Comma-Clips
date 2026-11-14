@@ -9,6 +9,11 @@ class SegmentTelemetry(
   val t: LongArray, val v: FloatArray, val a: FloatArray, val steer: FloatArray,
   val eng: BooleanArray, val leadOn: BooleanArray, val leadV: FloatArray, val leadD: FloatArray,
   val frames: Map<String, LongArray>, val wallOffset: Long?,
+  // added in telemetry format 2 (NaN / 0 when missing)
+  val ay: FloatArray = FloatArray(0), val blink: IntArray = IntArray(0), val ped: IntArray = IntArray(0),
+  val lat: DoubleArray = DoubleArray(0), val lon: DoubleArray = DoubleArray(0),
+  val alt: FloatArray = FloatArray(0), val hdg: FloatArray = FloatArray(0),
+  val format: Int = 1,
 ) {
   companion object {
     fun parse(o: JSONObject): SegmentTelemetry {
@@ -18,6 +23,9 @@ class SegmentTelemetry(
       val fr = o.optJSONObject("frames") ?: JSONObject()
       val frames = buildMap { for (k in fr.keys()) put(k, longs(fr.optJSONArray(k))) }
       val eng = o.optJSONArray("eng")
+      fun nfloats(a: JSONArray?) = FloatArray(a?.length() ?: 0) { if (a!!.isNull(it)) Float.NaN else a.getDouble(it).toFloat() }
+      fun ndoubles(a: JSONArray?) = DoubleArray(a?.length() ?: 0) { if (a!!.isNull(it)) Double.NaN else a.getDouble(it) }
+      fun ints(a: JSONArray?) = IntArray(a?.length() ?: 0) { a!!.optInt(it, 0) }
       return SegmentTelemetry(
         seg = o.getInt("seg"),
         t = longs(o.optJSONArray("t")), v = floats(o.optJSONArray("v")), a = floats(o.optJSONArray("a")),
@@ -28,13 +36,31 @@ class SegmentTelemetry(
         leadD = FloatArray(lead.length()) { lead.getJSONArray(it).getDouble(2).toFloat() },
         frames = frames,
         wallOffset = if (o.isNull("wall_offset")) null else o.optLong("wall_offset"),
+        ay = nfloats(o.optJSONArray("ay")), blink = ints(o.optJSONArray("blink")), ped = ints(o.optJSONArray("ped")),
+        lat = ndoubles(o.optJSONArray("lat")), lon = ndoubles(o.optJSONArray("lon")),
+        alt = nfloats(o.optJSONArray("alt")), hdg = nfloats(o.optJSONArray("hdg")),
+        format = o.optInt("v_fmt", 1),
       )
     }
   }
 }
 
 data class Sample(val speed: Float, val accel: Float, val steer: Float, val engaged: Boolean,
-                  val leadOn: Boolean, val leadSpeed: Float, val leadDist: Float)
+                  val leadOn: Boolean, val leadSpeed: Float, val leadDist: Float,
+                  val latAccel: Float = 0f, val blink: Int = 0, val pedal: Int = 0,
+                  val lat: Double? = null, val lon: Double? = null, val alt: Float? = null, val heading: Float? = null)
+
+/** Overlay elements, their labels and whether they're on by default (GPS off: it shows where you were). */
+enum class Element(val label: String, val default: Boolean) {
+  SPEED("Speed", true), PEDALS("Gas/brake dot", true), ENGAGED("Engaged", true), CLOCK("Date & time", true),
+  GPS("GPS position", false), HEADING("Heading", true), ALTITUDE("Altitude", true), BLINKERS("Turn signals", true),
+  LEAD("Lead car", true), ACCEL("Acceleration", true), STEER("Steering angle", true), WHEEL("Steering wheel", true),
+  GFORCE("G-force", true);
+  companion object { val defaults get() = entries.filter { it.default }.toSet() }
+}
+
+private val COMPASS = arrayOf("N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW")
+fun compass(deg: Float): String = COMPASS[(((deg % 360 + 360) % 360) / 22.5f + 0.5f).toInt() % 16]
 
 /** Several segments merged, with per-frame timestamps for one camera. */
 class Telemetry(segs: Map<Int, SegmentTelemetry>, order: List<Int>, camera: String) {
@@ -83,7 +109,11 @@ class Telemetry(segs: Map<Int, SegmentTelemetry>, order: List<Int>, camera: Stri
     if (kotlin.math.abs(t[lo] - mono) > 1_500_000_000L) return null
     val d = src[lo]; val i = idx[lo]
     return Sample(d.v[i], d.a[i], d.steer[i], d.eng.getOrElse(i) { false },
-      d.leadOn.getOrElse(i) { false }, d.leadV.getOrElse(i) { 0f }, d.leadD.getOrElse(i) { 0f })
+      d.leadOn.getOrElse(i) { false }, d.leadV.getOrElse(i) { 0f }, d.leadD.getOrElse(i) { 0f },
+      latAccel = d.ay.getOrElse(i) { 0f }.let { if (it.isNaN()) 0f else it },
+      blink = d.blink.getOrElse(i) { 0 }, pedal = d.ped.getOrElse(i) { 0 },
+      lat = d.lat.getOrElse(i) { Double.NaN }.takeIf { !it.isNaN() }, lon = d.lon.getOrElse(i) { Double.NaN }.takeIf { !it.isNaN() },
+      alt = d.alt.getOrElse(i) { Float.NaN }.takeIf { !it.isNaN() }, heading = d.hdg.getOrElse(i) { Float.NaN }.takeIf { !it.isNaN() })
   }
 
   fun wallMillis(mono: Long): Long? = wallOffset?.let { (mono + it) / 1_000_000L }

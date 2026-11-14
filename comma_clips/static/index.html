@@ -36,6 +36,7 @@
       <video id="video" playsinline controls muted preload="metadata"></video>
       <div id="hud" class="hidden">
         <div id="hudL" class="hud hud-l"></div>
+        <div id="hudC" class="hud-c"></div>
         <div id="hudR" class="hud hud-r"></div>
       </div>
     </div>
@@ -94,6 +95,11 @@
           <div class="hint">Speed, lead car, acceleration and steering wheel angle drawn on the video</div>
         </div>
         <input type="checkbox" id="osdToggle" class="switch">
+      </div>
+      <div class="field" id="elementsField">
+        <label>Show on the video</label>
+        <div class="checks" id="elementChecks"></div>
+        <div class="hint">GPS position is off by default: it shows exactly where you were.</div>
       </div>
       <div class="field switch-row">
         <div>

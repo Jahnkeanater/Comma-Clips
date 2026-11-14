@@ -41,7 +41,11 @@ for seg in segs:
   frames = {"road": [], "wide": [], "driver": []}
   t, v, a, steer, eng = [], [], [], [], []
   lead = []  # [status, vLead, dRel]
+  ay, blink, ped = [], [], []     # sideways accel (m/s2, left +), blinkers (1 left, 2 right, 3 both), pedals (1 gas, 2 brake)
+  lat, lon, alt, hdg = [], [], [], []
   cur_lead = [0, 0.0, 0.0]
+  cur_gps = [None, None, None, None]
+  yaw = 0.0
   engaged = 0
   wall_offset = None
   cs_count = 0
@@ -62,22 +66,34 @@ for seg in segs:
       steer.append(r(cs.steeringAngleDeg, 1))
       eng.append(engaged)
       lead.append(list(cur_lead))
+      ay.append(r(-cs.vEgo * yaw, 2))  # yaw rate is about the device's downward axis, so left turns are negative
+      blink.append((1 if cs.leftBlinker else 0) | (2 if cs.rightBlinker else 0))
+      ped.append(2 if cs.brakePressed else (1 if cs.gasPressed else 0))
+      lat.append(cur_gps[0]); lon.append(cur_gps[1]); alt.append(cur_gps[2]); hdg.append(cur_gps[3])
     elif w == "radarState":
       l1 = ev.radarState.leadOne
       cur_lead = [1 if l1.status else 0, r(l1.vLead), r(l1.dRel, 1)]
     elif w == "selfdriveState":
       engaged = 1 if ev.selfdriveState.enabled else 0
-    elif w == "gpsLocationExternal" and wall_offset is None:
+    elif w == "livePose":
+      av = ev.livePose.angularVelocityDevice
+      yaw = av.z if av.valid else 0.0
+    elif w == "gpsLocationExternal":
       g = ev.gpsLocationExternal
-      if g.hasFix and g.unixTimestampMillis > 0:
-        wall_offset = g.unixTimestampMillis * 1_000_000 - ev.logMonoTime
+      if g.hasFix:
+        cur_gps = [round(g.latitude, 6), round(g.longitude, 6), round(g.altitude, 1), round(g.bearingDeg, 1)]
+        if wall_offset is None and g.unixTimestampMillis > 0:
+          wall_offset = g.unixTimestampMillis * 1_000_000 - ev.logMonoTime
+      else:
+        cur_gps = [None, None, None, None]
     elif w == "clocks" and wall_offset is None:
       c = ev.clocks
       if c.wallTimeNanos > 0:
         wall_offset = c.wallTimeNanos - ev.logMonoTime
 
   print(json.dumps({
-    "seg": seg, "src": os.path.basename(path), "frames": frames,
+    "v_fmt": 2, "seg": seg, "src": os.path.basename(path), "frames": frames,
     "t": t, "v": v, "a": a, "steer": steer, "eng": eng, "lead": lead,
+    "ay": ay, "blink": blink, "ped": ped, "lat": lat, "lon": lon, "alt": alt, "hdg": hdg,
     "wall_offset": wall_offset,
   }, separators=(",", ":")), flush=True)

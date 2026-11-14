@@ -2,6 +2,7 @@ package app.commaclips.data
 
 import android.content.Context
 import app.commaclips.core.Camera
+import app.commaclips.core.Element
 import app.commaclips.core.Units
 
 /** Small persistent settings (address, trusted device keys, export choices). */
@@ -40,6 +41,9 @@ class Prefs(context: Context) {
   var exportAudio: Boolean
     get() = p.getBoolean("exportAudio", true)
     set(v) = p.edit().putBoolean("exportAudio", v).apply()
+  var elements: Set<Element>
+    get() = p.getStringSet("elements", null)?.mapNotNull { runCatching { Element.valueOf(it) }.getOrNull() }?.toSet() ?: Element.defaults
+    set(v) = p.edit().putStringSet("elements", v.map { it.name }.toSet()).apply()
   var muted: Boolean
     get() = p.getBoolean("muted", false)
     set(v) = p.edit().putBoolean("muted", v).apply()

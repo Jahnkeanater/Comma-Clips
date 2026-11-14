@@ -13,7 +13,7 @@ from pathlib import Path
 
 from . import device
 from .config import CONFIG
-from .osd import FPS, Telemetry, build_ass, corners_geometry, wall_time, wheel_commands
+from .osd import FPS, Telemetry, build_ass, corners_geometry, normalize_elements, wall_time, wheel_commands
 
 SEG_LEN = 60.0
 
@@ -132,8 +132,9 @@ def validate(p: dict) -> dict:
   quality = p.get("quality", "high")
   if quality not in ("high", "medium", "small"):
     quality = "high"
+  elements = normalize_elements(p.get("elements"))
   return {"route": route, "camera": camera, "start": start, "end": end, "mode": mode,
-          "osd": osd, "units": units, "quality": quality, "audio": audio}
+          "osd": osd, "units": units, "quality": quality, "audio": audio, "elements": elements}
 
 
 def run_export(job: Job):
@@ -219,9 +220,10 @@ def run_export(job: Job):
     vf = f"trim=start_frame={first_frame}:end_frame={first_frame + n_frames},setpts=PTS-STARTPTS"
     if p["osd"]:
       width, height = probe_size(local[0])
-      write_osd_files(Path(td), width, height, tel, first_frame, n_frames, p["units"])
-      cmd += osd_input_args()
-      n_inputs += 1
+      write_osd_files(Path(td), width, height, tel, first_frame, n_frames, p["units"], p["elements"])
+      if p["elements"]["wheel"]:
+        cmd += osd_input_args()
+        n_inputs += 1
     audio_idx = None
     if qcams:
       job.message = "lining up audio"
@@ -237,7 +239,7 @@ def run_export(job: Job):
       crf = {"high": "18", "medium": "22", "small": "27"}[p["quality"]]
       # frame-accurate cut; timestamps restart at 0 so the overlay track lines up with the first frame
       if p["osd"]:
-        cmd += ["-filter_complex", osd_filter(vf, width, height), "-map", "[out]"]
+        cmd += ["-filter_complex", osd_filter(vf, width, height, p["elements"]), "-map", "[out]"]
       else:
         cmd += ["-map", "0:v", "-vf", vf]
       cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", crf, "-pix_fmt", "yuv420p", "-r", str(FPS)]
@@ -335,9 +337,9 @@ def build_audio(qcams: dict[int, Path], segs: list[int], k0: int, offset: float,
   return True
 
 
-def write_osd_files(td: Path, width, height, tel, first_frame, n_frames, units):
+def write_osd_files(td: Path, width, height, tel, first_frame, n_frames, units, elements=None):
   """Overlay text/boxes as ASS plus a sendcmd script that turns comma's wheel image."""
-  ass = build_ass(width, height, tel, first_frame, n_frames, units=units, layout="corners", draw_wheel=False)
+  ass = build_ass(width, height, tel, first_frame, n_frames, units=units, layout="corners", draw_wheel=False, elements=elements)
   (td / "osd.ass").write_text(ass, encoding="utf-8")
   (td / "wheel.cmd").write_text(wheel_commands(tel, first_frame, n_frames), encoding="utf-8")
 
@@ -346,8 +348,10 @@ def osd_input_args() -> list[str]:
   return ["-loop", "1", "-framerate", str(FPS), "-i", str(WHEEL_PNG)]
 
 
-def osd_filter(trim_vf: str, width: int, height: int) -> str:
-  g = corners_geometry(width, height)
+def osd_filter(trim_vf: str, width: int, height: int, elements=None) -> str:
+  g = corners_geometry(width, height, elements)
+  if not g["el"]["wheel"]:
+    return f"[0:v]{trim_vf},subtitles=osd.ass[out]"
   S = g["wheel_size"]
   x, y = g["wheel_cx"] - S // 2, g["wheel_cy"] - S // 2
   return (f"[0:v]{trim_vf},subtitles=osd.ass[base];"

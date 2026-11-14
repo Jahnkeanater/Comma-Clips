@@ -34,6 +34,7 @@ data class ExportParams(
   val route: String, val start: Double, val end: Double, val camera: Camera,
   val osd: Boolean, val units: Units, val fast: Boolean, val quality: Int,
   val audio: Boolean = true,
+  val elements: Set<Element> = Element.defaults,
 )
 
 data class ExportJob(
@@ -83,7 +84,7 @@ class TelemetryOverlay(
     if (bucket != lastBucket) {
       lastBucket = bucket
       val mono = tel.frameMono(frame)
-      renderer.draw(canvas, mono?.let { tel.sample(it) }, mono?.let { tel.wallMillis(it) })
+      renderer.draw(canvas, mono?.let { tel.sample(it) }, mono?.let { tel.wallMillis(it) }, frame)
     }
     return bitmap
   }
@@ -188,7 +189,7 @@ class Exporter(private val ctx: Context, private val repo: Repo) {
       val out = File(work, "$id-out.mp4")
       val effects = if (tel != null) {
         val wheel = BitmapFactory.decodeResource(ctx.resources, R.drawable.chffr_wheel)
-        val overlay = TelemetryOverlay(OverlayRenderer(mux.width, mux.height, wheel, p.units), tel, mux.firstFrame, clipStartUs)
+        val overlay = TelemetryOverlay(OverlayRenderer(mux.width, mux.height, wheel, p.units, p.elements), tel, mux.firstFrame, clipStartUs)
         Effects(emptyList(), listOf(OverlayEffect(ImmutableList.of<androidx.media3.effect.TextureOverlay>(overlay))))
       } else Effects.EMPTY
       val item = MediaItem.Builder().setUri(Uri.fromFile(joined))
