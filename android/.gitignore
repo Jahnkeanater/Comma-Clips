@@ -1,0 +1,13 @@
+# build output and machine-specific settings (local.properties contains your SDK path)
+.gradle/
+build/
+app/build/
+local.properties
+.kotlin/
+*.apk
+*.aab
+*.keystore
+*.jks
+captures/
+.idea/
+*.iml

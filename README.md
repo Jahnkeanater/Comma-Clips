@@ -19,6 +19,8 @@ Browse the drives stored on your comma device and export full-resolution clips, 
   - search your network for the comma, or enter its IP or `comma-xxxxxxxx.local` name
   - pick which SSH key to use
 
+There's also a standalone **Android app** that needs no computer; see [android/README.md](android/README.md).
+
 It was built and tested on a comma 4 running sunnypilot. Anything based on openpilot that keeps drives in `/data/media/0/realdata` should work.
 
 Not affiliated with comma.ai.
