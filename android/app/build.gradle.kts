@@ -15,7 +15,8 @@ android {
   }
   buildTypes {
     release {
-      isMinifyEnabled = false
+      isMinifyEnabled = true
+      proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("debug")
     }
   }
@@ -25,7 +26,7 @@ android {
     targetCompatibility = JavaVersion.VERSION_17
   }
   packaging {
-    resources.excludes += setOf("META-INF/versions/**", "META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/*.kotlin_module")
+    resources.excludes += setOf("META-INF/versions/**", "META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/*.kotlin_module", "org/bouncycastle/pqc/**")
   }
 }
 
@@ -36,7 +37,7 @@ dependencies {
   implementation(composeBom)
   implementation("androidx.compose.material3:material3")
   implementation("androidx.compose.ui:ui")
-  implementation("androidx.compose.material:material-icons-extended")
+  implementation("androidx.compose.material:material-icons-core")
   implementation("androidx.activity:activity-compose:1.13.0")
   implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
   implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")

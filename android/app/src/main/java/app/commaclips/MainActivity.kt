@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -69,10 +70,10 @@ class MainActivity : ComponentActivity() {
           bottomBar = {
             if (screen == Screen.Drives || screen == Screen.Exports) NavigationBar {
               NavigationBarItem(selected = screen == Screen.Drives, onClick = { screen = Screen.Drives },
-                icon = { Icon(Icons.Default.DirectionsCar, null) }, label = { Text("Drives") })
+                icon = { Icon(Icons.Default.Home, null) }, label = { Text("Drives") })
               val active = jobs.count { it.state == "running" || it.state == "queued" }
               NavigationBarItem(selected = screen == Screen.Exports, onClick = { screen = Screen.Exports },
-                icon = { BadgedBox(badge = { if (active > 0) Badge { Text("$active") } }) { Icon(Icons.Default.Movie, null) } },
+                icon = { BadgedBox(badge = { if (active > 0) Badge { Text("$active") } }) { Icon(Icons.AutoMirrored.Filled.List, null) } },
                 label = { Text("Exports") })
             }
           },

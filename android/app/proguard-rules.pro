@@ -1,0 +1,13 @@
+# SSH (sshj) and BouncyCastle find algorithms by reflection: keep them whole.
+-keep class net.schmizz.** { *; }
+-keep class com.hierynomus.** { *; }
+-keep class org.bouncycastle.** { *; }
+-keep class org.slf4j.** { *; }
+-keep class app.commaclips.** { *; }
+-dontwarn org.bouncycastle.**
+-dontwarn net.schmizz.**
+-dontwarn com.hierynomus.**
+-dontwarn org.slf4j.**
+-dontwarn javax.naming.**
+-dontwarn org.ietf.jgss.**
+-dontwarn com.jcraft.jzlib.**
