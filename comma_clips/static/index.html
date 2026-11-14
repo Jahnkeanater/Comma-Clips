@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>Comma Clips</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="stylesheet" href="/static/style.css">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
+</head>
+<body>
+<header class="top">
+  <button id="backBtn" class="icon-btn hidden" aria-label="Back">&#8592;</button>
+  <h1 id="title">Comma Clips</h1>
+  <span id="devStatus" class="pill">…</span>
+  <button id="refreshBtn" class="icon-btn" aria-label="Refresh">&#8635;</button>
+  <button id="settingsBtn" class="icon-btn" aria-label="Connection settings">&#9881;</button>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="drives" class="active">Drives</button>
+  <button data-tab="exports">Exports <span id="jobBadge" class="badge hidden"></span></button>
+</nav>
+
+<main>
+  <section id="view-drives">
+    <div id="notice" class="notice hidden"></div>
+    <div id="routeList" class="route-list"><div class="empty">Loading drives…</div></div>
+  </section>
+
+  <section id="view-route" class="hidden">
+    <div class="player-wrap">
+      <video id="video" playsinline controls muted preload="metadata"></video>
+      <div id="hud" class="hidden">
+        <div id="hudL" class="hud hud-l"></div>
+        <div id="hudR" class="hud hud-r"></div>
+      </div>
+    </div>
+
+    <div class="timeline-wrap">
+      <div id="timeline" class="timeline" aria-label="Drive timeline">
+        <div id="tlMissing"></div>
+        <div id="tlSel" class="tl-sel"></div>
+        <div id="tlHead" class="tl-head"></div>
+      </div>
+      <div class="tl-labels"><span id="tlStartLbl"></span><span id="tlNowLbl"></span><span id="tlEndLbl"></span></div>
+    </div>
+
+    <div class="card">
+      <div class="range-row">
+        <div class="range-col">
+          <label>Start</label>
+          <div class="time-big" id="selStart">0:00</div>
+          <div class="wall" id="selStartWall"></div>
+          <div class="nudge">
+            <button data-nudge="start:-5">−5s</button><button data-nudge="start:-1">−1s</button>
+            <button data-nudge="start:1">+1s</button><button data-nudge="start:5">+5s</button>
+          </div>
+          <button class="primary-ghost" id="setStart">Set start here</button>
+        </div>
+        <div class="range-col">
+          <label>End</label>
+          <div class="time-big" id="selEnd">0:00</div>
+          <div class="wall" id="selEndWall"></div>
+          <div class="nudge">
+            <button data-nudge="end:-5">−5s</button><button data-nudge="end:-1">−1s</button>
+            <button data-nudge="end:1">+1s</button><button data-nudge="end:5">+5s</button>
+          </div>
+          <button class="primary-ghost" id="setEnd">Set end here</button>
+        </div>
+      </div>
+      <div class="presets">
+        <span>Quick:</span>
+        <button data-preset="-30:0">30 s before playhead</button>
+        <button data-preset="-15:15">±15 s</button>
+        <button data-preset="-60:0">1 min before</button>
+        <button data-preset="all">Whole drive</button>
+      </div>
+      <div class="sel-summary">Clip length <b id="selLen">0:00</b></div>
+    </div>
+
+    <div class="card">
+      <h2>Export</h2>
+      <div class="field">
+        <label>Camera</label>
+        <div class="seg-ctl" id="camCtl"></div>
+      </div>
+      <div class="field switch-row">
+        <div>
+          <label for="osdToggle">Telemetry overlay</label>
+          <div class="hint">Speed, lead car, acceleration and steering wheel angle drawn on the video</div>
+        </div>
+        <input type="checkbox" id="osdToggle" class="switch">
+      </div>
+      <div class="field" id="unitsField">
+        <label>Units</label>
+        <div class="seg-ctl" id="unitsCtl">
+          <button data-v="mph">mph</button><button data-v="kmh">km/h</button>
+        </div>
+      </div>
+      <div class="field" id="modeField">
+        <label>Mode</label>
+        <div class="seg-ctl" id="modeCtl">
+          <button data-v="exact">Exact cut</button><button data-v="fast">Fast copy</button>
+        </div>
+        <div class="hint" id="modeHint"></div>
+      </div>
+      <div class="field" id="qualityField">
+        <label>Quality</label>
+        <div class="seg-ctl" id="qualityCtl">
+          <button data-v="high">High</button><button data-v="medium">Medium</button><button data-v="small">Small</button>
+        </div>
+      </div>
+      <div class="field switch-row">
+        <div>
+          <label for="hudToggle">Show telemetry on preview</label>
+          <div class="hint">Reads the drive logs from the comma (only while parked)</div>
+        </div>
+        <input type="checkbox" id="hudToggle" class="switch">
+      </div>
+      <button id="exportBtn" class="primary">Export full-resolution clip</button>
+      <div id="exportMsg" class="hint center"></div>
+    </div>
+  </section>
+
+  <section id="view-settings" class="hidden">
+    <div id="welcome" class="card welcome hidden">
+      <h2>Welcome to Comma Clips</h2>
+      <p>Let's connect to your comma. It needs to be switched on, on the same Wi-Fi as this computer, with SSH turned on
+      (in the comma's settings, turn on SSH and enter your GitHub username so it accepts your key; it's under Developer or Network depending on the software version).</p>
+      <p>Then use <b>Search network</b> below, or type its IP address.</p>
+    </div>
+    <div class="card">
+      <h2>Comma connection</h2>
+      <div class="conn-now">
+        <div><label>Connected to</label><div id="curHost" class="mono">…</div><div id="curIp" class="hint"></div></div>
+        <span id="curState" class="pill">…</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Set address</h2>
+      <div class="field">
+        <label for="hostInput">IP address or name</label>
+        <div class="host-row">
+          <span class="host-user">comma@</span>
+          <input id="hostInput" class="text-in" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="192.168.1.50 or comma-xxxxxxxx.local">
+        </div>
+        <div class="hint">Using the name (comma-xxxxxxxx.local) keeps working when your router gives the comma a new IP.</div>
+      </div>
+      <div class="btn-row">
+        <button id="testBtn" class="primary-ghost">Test</button>
+        <button id="saveBtn" class="primary">Save &amp; connect</button>
+      </div>
+      <div id="testResult" class="test-result hidden"></div>
+    </div>
+
+    <div class="card">
+      <h2>SSH key</h2>
+      <div class="field">
+        <label for="keyInput">Private key file</label>
+        <input id="keyInput" class="text-in boxed" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="~/.ssh/id_ed25519  (leave empty to use your normal keys)">
+        <div class="hint">The key whose public half is on your GitHub account (the comma downloads it from there). Leave empty and ssh tries your usual keys in ~/.ssh.</div>
+      </div>
+      <button id="keyBtn" class="primary-ghost">Use this key</button>
+      <div id="keyResult" class="test-result hidden"></div>
+    </div>
+
+    <div class="card">
+      <h2>Find my comma</h2>
+      <p class="hint">Looks for devices on your Wi-Fi network that accept SSH and picks out ones named comma-… or carrying a key you already trust.</p>
+      <button id="scanBtn" class="primary-ghost">Search network</button>
+      <div id="scanResults"></div>
+    </div>
+  </section>
+
+  <section id="view-exports" class="hidden">
+    <div id="jobList"></div>
+    <h2 class="section-h">Saved clips</h2>
+    <div id="fileList" class="file-list"></div>
+  </section>
+</main>
+
+<dialog id="playerDlg">
+  <form method="dialog"><button class="icon-btn close" aria-label="Close">&#10005;</button></form>
+  <video id="dlgVideo" playsinline controls></video>
+  <div class="dlg-actions"><a id="dlgDownload" class="primary" download>Download</a></div>
+</dialog>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
