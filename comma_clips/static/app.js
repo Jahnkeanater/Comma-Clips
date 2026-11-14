@@ -8,7 +8,7 @@ const store = {
 
 const state = {
   routes: [], route: null, playable: [], sel: { start: 0, end: 0 },
-  opts: Object.assign({ camera: "road", osd: true, units: "mph", mode: "exact", quality: "high", hud: false }, store.get("opts", {})),
+  opts: Object.assign({ camera: "road", osd: true, units: "mph", mode: "exact", quality: "high", hud: false, audio: true }, store.get("opts", {})),
   tel: new Map(), telLoading: new Set(), hls: null, tab: "drives",
 };
 
@@ -212,6 +212,7 @@ function bindSeg(id, key) {
 }
 bindSeg("camCtl", "camera"); bindSeg("unitsCtl", "units"); bindSeg("modeCtl", "mode"); bindSeg("qualityCtl", "quality");
 $("osdToggle").onchange = (e) => { state.opts.osd = e.target.checked; syncOpts(); };
+$("audioToggle").onchange = (e) => { state.opts.audio = e.target.checked; syncOpts(); };
 $("hudToggle").onchange = (e) => { state.opts.hud = e.target.checked; syncOpts(); if (!state.opts.hud) $("hud").classList.add("hidden"); else updateHead(); };
 
 function syncOpts() {
@@ -222,6 +223,7 @@ function syncOpts() {
   }
   $("modeCtl").querySelector('[data-v="fast"]').disabled = o.osd;
   $("osdToggle").checked = o.osd;
+  $("audioToggle").checked = o.audio !== false;
   $("hudToggle").checked = o.hud;
   $("unitsField").classList.toggle("hidden", !o.osd && !o.hud);
   $("qualityField").classList.toggle("hidden", o.mode === "fast");
@@ -239,7 +241,7 @@ $("exportBtn").onclick = async () => {
     const o = state.opts;
     await api("/api/export", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ route: state.route.name, start: state.sel.start, end: state.sel.end, camera: o.camera,
-        osd: o.osd, units: o.units, mode: o.mode, quality: o.quality }) });
+        osd: o.osd, units: o.units, mode: o.mode, quality: o.quality, audio: o.audio !== false }) });
     msg.innerHTML = `Export started. <a href="#/exports">See progress</a>`;
     pollJobs();
   } catch (e) { msg.textContent = "Export failed: " + e.message; }
@@ -290,7 +292,7 @@ async function pollJobs() {
 function renderJobs(jobs) {
   const camNames = { road: "Road", wide: "Wide", driver: "Driver" };
   $("jobList").innerHTML = jobs.filter((j) => j.state !== "done").map((j) => {
-    const p = j.params, title = `${camNames[p.camera]} · ${fmtDur(p.end - p.start)}${p.osd ? " · overlay" : ""}`;
+    const p = j.params, title = `${camNames[p.camera]} · ${fmtDur(p.end - p.start)}${p.osd ? " · overlay" : ""}${p.audio ? " · audio" : ""}`;
     const live = j.state === "running" || j.state === "queued";
     return `<div class="job ${j.state}"><div class="row"><b>${title}</b>
       ${live ? `<button class="small-btn" data-cancel="${j.id}">Cancel</button>` : ""}</div>

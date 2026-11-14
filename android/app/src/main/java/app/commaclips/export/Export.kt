@@ -33,6 +33,7 @@ import kotlin.coroutines.resumeWithException
 data class ExportParams(
   val route: String, val start: Double, val end: Double, val camera: Camera,
   val osd: Boolean, val units: Units, val fast: Boolean, val quality: Int,
+  val audio: Boolean = true,
 )
 
 data class ExportJob(
@@ -145,6 +146,21 @@ class Exporter(private val ctx: Context, private val repo: Repo) {
       tel = Telemetry(data, segs, p.camera.name.lowercase())
     }
 
+    // 2b) cabin audio: it lives in the small preview files (the full-resolution video has none)
+    val audioFiles: List<File?> = if (!p.audio) emptyList() else segs.map { s ->
+      check()
+      val size = route.segment(s)?.files?.get("qcamera.ts") ?: return@map null
+      val f = File(repo.segDir, "${p.route}/$s/qcamera.ts")
+      if (!(f.exists() && f.length() == size)) runCatching {
+        f.parentFile!!.mkdirs()
+        val tmp = File(f.path + ".part")
+        up("Copying audio from comma", wFetch, "minute ${s - k0 + 1}/${segs.size}")
+        repo.withComma { c -> tmp.outputStream().use { out -> c.download("${DevicePaths.REALDATA}/${p.route}--$s/qcamera.ts", out, cancelled = { Jobs.isCancelled(id) }) } }
+        tmp.renameTo(f)
+      }
+      f.takeIf { it.exists() && it.length() == size }
+    }
+
     // 3) join into an MP4 (cut at the keyframe before the start)
     check()
     val startFrame = Math.round((p.start - k0 * segLen) * DevicePaths.FPS).toInt()
@@ -152,7 +168,7 @@ class Exporter(private val ctx: Context, private val repo: Repo) {
     val work = File(ctx.cacheDir, "export").apply { mkdirs() }
     val joined = File(work, "$id-joined.mp4")
     val mux = withContext(Dispatchers.IO) {
-      HevcMuxer.mux(local, startFrame, endFrame, joined,
+      HevcMuxer.mux(local, startFrame, endFrame, joined, audio = audioFiles,
         progress = { f -> up("Joining video", wFetch + wTel + wMux * f) }, cancelled = { Jobs.isCancelled(id) })
     }
 
@@ -179,7 +195,7 @@ class Exporter(private val ctx: Context, private val repo: Repo) {
         .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder()
           .setStartPositionUs(clipStartUs).setEndPositionUs(clipEndUs).build())
         .build()
-      val edited = EditedMediaItem.Builder(item).setRemoveAudio(true).setEffects(effects).build()
+      val edited = EditedMediaItem.Builder(item).setRemoveAudio(!mux.hasAudio).setEffects(effects).build()
       val bitrate = when (p.quality) { 0 -> 16_000_000; 1 -> 8_000_000; else -> 4_000_000 } * mux.width * mux.height / (1344 * 760)
       transform(edited, out, bitrate) { f -> up("Encoding", wFetch + wTel + wMux + (1 - wFetch - wTel - wMux) * f) }
       joined.delete()

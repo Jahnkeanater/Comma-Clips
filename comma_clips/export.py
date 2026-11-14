@@ -31,17 +31,11 @@ def probe_size(path: Path) -> tuple[int, int]:
 
 
 def keyframe_times(path: Path) -> list[float]:
+  """Keyframe times in a raw HEVC segment. The raw stream has no timestamps, so count frames (20 per second)."""
   out = subprocess.run(["ffprobe", "-v", "error", "-f", "hevc", "-framerate", str(FPS), "-select_streams", "v:0",
-                        "-show_entries", "packet=pts_time,flags", "-of", "csv=p=0", str(path)],
+                        "-show_entries", "packet=flags", "-of", "csv=p=0", str(path)],
                        capture_output=True, text=True).stdout
-  ts = []
-  for line in out.splitlines():
-    parts = line.split(",")
-    if len(parts) >= 2 and "K" in parts[1]:
-      try:
-        ts.append(float(parts[0]))
-      except ValueError:
-        pass
+  ts = [i / FPS for i, line in enumerate(l for l in out.splitlines() if l.strip()) if "K" in line]
   return ts or [0.0]
 
 
@@ -134,11 +128,12 @@ def validate(p: dict) -> dict:
   if mode not in ("exact", "fast"):
     raise ValueError("bad mode")
   units = "kmh" if p.get("units") == "kmh" else "mph"
+  audio = bool(p.get("audio", True))
   quality = p.get("quality", "high")
   if quality not in ("high", "medium", "small"):
     quality = "high"
   return {"route": route, "camera": camera, "start": start, "end": end, "mode": mode,
-          "osd": osd, "units": units, "quality": quality}
+          "osd": osd, "units": units, "quality": quality, "audio": audio}
 
 
 def run_export(job: Job):
@@ -182,6 +177,16 @@ def run_export(job: Job):
     tel_data = device.fetch_telemetry(p["route"], segs, progress=tprog)
     tel = Telemetry(tel_data, segs, p["camera"])
 
+  # 2b) cabin audio comes from the small preview files (the full-resolution video has none)
+  qcams = {}
+  if p.get("audio"):
+    job.phase = "copying audio from comma"
+    for s in segs:
+      if "qcamera.ts" in seg_info[s]["files"]:
+        if job.cancel.is_set():
+          raise Cancelled()
+        qcams[s] = device.fetch_file(p["route"], s, "qcamera.ts", seg_info[s]["files"]["qcamera.ts"])
+
   if job.cancel.is_set():
     raise Cancelled()
 
@@ -210,21 +215,37 @@ def run_export(job: Job):
     cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1",
            "-fflags", "+genpts", "-f", "hevc", "-framerate", str(FPS),
            "-i", "concat:" + "|".join(str(x) for x in local)]
+    n_inputs = 1
+    vf = f"trim=start_frame={first_frame}:end_frame={first_frame + n_frames},setpts=PTS-STARTPTS"
+    if p["osd"]:
+      width, height = probe_size(local[0])
+      write_osd_files(Path(td), width, height, tel, first_frame, n_frames, p["units"])
+      cmd += osd_input_args()
+      n_inputs += 1
+    audio_idx = None
+    if qcams:
+      job.message = "lining up audio"
+      wav = Path(td) / "audio.wav"
+      if build_audio(qcams, segs, k0, offset, duration, wav):
+        # fast copy cuts with -ss on the output, so shift the audio to start at the cut point
+        cmd += (["-itsoffset", f"{offset:.3f}"] if fast else []) + ["-i", str(wav)]
+        audio_idx = n_inputs
+        n_inputs += 1
     if fast:
-      cmd += ["-ss", f"{offset:.3f}", "-t", f"{duration:.3f}", "-c", "copy", "-tag:v", "hvc1"]
+      cmd += ["-map", "0:v", "-ss", f"{offset:.3f}", "-t", f"{duration:.3f}", "-c:v", "copy", "-tag:v", "hvc1"]
     else:
       crf = {"high": "18", "medium": "22", "small": "27"}[p["quality"]]
       # frame-accurate cut; timestamps restart at 0 so the overlay track lines up with the first frame
-      vf = f"trim=start_frame={first_frame}:end_frame={first_frame + n_frames},setpts=PTS-STARTPTS"
       if p["osd"]:
-        width, height = probe_size(local[0])
-        write_osd_files(Path(td), width, height, tel, first_frame, n_frames, p["units"])
-        cmd += osd_input_args()
         cmd += ["-filter_complex", osd_filter(vf, width, height), "-map", "[out]"]
       else:
-        cmd += ["-vf", vf]
+        cmd += ["-map", "0:v", "-vf", vf]
       cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", crf, "-pix_fmt", "yuv420p", "-r", str(FPS)]
-    cmd += ["-an", "-movflags", "+faststart", str(tmp_out)]
+    if audio_idx is not None:
+      cmd += ["-map", f"{audio_idx}:a", "-c:a", "aac", "-b:a", "96k"]
+    else:
+      cmd += ["-an"]
+    cmd += ["-movflags", "+faststart", str(tmp_out)]
 
     job.proc = subprocess.Popen(cmd, cwd=td, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     base = w_fetch + w_tel
@@ -253,6 +274,65 @@ def run_export(job: Job):
 
 
 WHEEL_PNG = Path(__file__).parent / "assets" / "chffr_wheel.png"
+AUDIO_RATE = 16000
+
+
+def _stream_starts(path: Path) -> dict[str, float]:
+  out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,start_time", "-of", "csv=p=0", str(path)],
+                       capture_output=True, text=True).stdout
+  starts = {}
+  for line in out.splitlines():
+    parts = line.split(",")
+    if len(parts) >= 2 and parts[0] in ("video", "audio") and parts[0] not in starts:
+      try:
+        starts[parts[0]] = float(parts[1])
+      except ValueError:
+        pass
+  return starts
+
+
+def build_audio(qcams: dict[int, Path], segs: list[int], k0: int, offset: float, duration: float, out: Path) -> bool:
+  """Builds the clip's audio track from the preview files, lined up minute by minute.
+
+  The preview files carry timestamps from the comma's clock, so each minute's audio is placed relative
+  to that minute's first video frame. That keeps it in sync over long clips (each recorded minute is
+  slightly longer than 60 s of frames, so simply joining the audio would drift)."""
+  import array
+  import wave
+  n = int(round(duration * AUDIO_RATE))
+  buf = array.array("h", bytes(2 * n))
+  placed = False
+  for k in segs:
+    path = qcams.get(k)
+    if path is None:
+      continue
+    st = _stream_starts(path)
+    if "audio" not in st or "video" not in st:
+      continue
+    pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-map", "0:a:0", "-ac", "1", "-ar", str(AUDIO_RATE),
+                          "-f", "s16le", "-"], capture_output=True).stdout
+    if not pcm:
+      continue
+    samples = array.array("h")
+    samples.frombytes(pcm[: len(pcm) // 2 * 2])
+    lead = st["audio"] - st["video"]            # audio start relative to this minute's first frame
+    seg_start = (k - k0) * SEG_LEN - offset      # this minute's first frame in clip time
+    first = max(0, int(round(-lead * AUDIO_RATE)))                    # skip audio before the first frame
+    last = min(len(samples), int(round((SEG_LEN - lead) * AUDIO_RATE)))  # and after the minute ends
+    dst = int(round((seg_start + lead) * AUDIO_RATE)) + first
+    if dst < 0:
+      first -= dst; dst = 0
+    count = min(last - first, n - dst)
+    if count <= 0:
+      continue
+    buf[dst:dst + count] = samples[first:first + count]
+    placed = True
+  if not placed:
+    return False
+  with wave.open(str(out), "wb") as w:
+    w.setnchannels(1); w.setsampwidth(2); w.setframerate(AUDIO_RATE)
+    w.writeframes(buf.tobytes())
+  return True
 
 
 def write_osd_files(td: Path, width, height, tel, first_frame, n_frames, units):

@@ -59,7 +59,7 @@ fun ExportsScreen() {
       SectionCard(borderColor = if (j.state == "error") Bad else null) {
         val p = j.params
         Row(verticalAlignment = Alignment.CenterVertically) {
-          Text("${p.camera.label} · ${formatDur(p.end - p.start)}${if (p.osd) " · overlay" else ""}", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+          Text("${p.camera.label} · ${formatDur(p.end - p.start)}${if (p.osd) " · overlay" else ""}${if (p.audio) " · audio" else ""}", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
           if (j.state == "running" || j.state == "queued") TextButton(onClick = { Jobs.cancel(j.id) }) { Text("Cancel") }
         }
         if (j.state == "running" || j.state == "queued") LinearProgressIndicator(progress = { j.progress }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))

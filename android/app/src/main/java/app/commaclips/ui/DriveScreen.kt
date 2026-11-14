@@ -90,6 +90,7 @@ fun DriveScreen(repo: Repo, routeName: String, showExports: () -> Unit) {
   var quality by remember { mutableIntStateOf(prefs.quality) }
   var hud by remember { mutableStateOf(prefs.hud) }
   var muted by remember { mutableStateOf(prefs.muted) }
+  var withAudio by remember { mutableStateOf(prefs.exportAudio) }
   var message by remember { mutableStateOf<String?>(null) }
   val scope = rememberCoroutineScope()
 
@@ -153,6 +154,9 @@ fun DriveScreen(repo: Repo, routeName: String, showExports: () -> Unit) {
         SwitchRow("Telemetry overlay", "Speed, lead car, acceleration and steering wheel on the video", osd) {
           osd = it; prefs.osd = it; if (it) { fast = false; prefs.fastMode = false }
         }
+        SwitchRow("Include audio", "The cabin microphone audio the comma records (turn off for privacy when sharing)", withAudio) {
+          withAudio = it; prefs.exportAudio = it
+        }
         if (osd || hud) {
           Hint("Units", Modifier.padding(top = 4.dp))
           Segmented(listOf(Units.MPH to "mph", Units.KMH to "km/h"), units) { units = it; prefs.units = it }
@@ -170,7 +174,7 @@ fun DriveScreen(repo: Repo, routeName: String, showExports: () -> Unit) {
         }
         SwitchRow("Show telemetry on preview", "Reads the drive logs from the comma (only while parked)", hud) { hud = it; prefs.hud = it }
         Button(onClick = {
-          Jobs.add(ExportParams(route.name, start, end, camera, osd, units, fast && !osd, quality))
+          Jobs.add(ExportParams(route.name, start, end, camera, osd, units, fast && !osd, quality, withAudio))
           ExportService.start(ctx)
           message = "Export started"
         }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Export full-resolution clip") }
