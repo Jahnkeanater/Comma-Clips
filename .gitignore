@@ -10,3 +10,7 @@ previews/
 # local settings (the app keeps these in ~/.config/comma-clips, but just in case)
 config.json
 known_hosts
+
+# built apps
+dist/
+*.apk
