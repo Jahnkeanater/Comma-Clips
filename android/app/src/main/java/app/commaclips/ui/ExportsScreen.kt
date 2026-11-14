@@ -54,7 +54,7 @@ fun ExportsScreen() {
   val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { reload++ }
 
   LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    val active = jobs.filter { it.state != "done" }
+    val active = jobs.reversed()  // this session's exports, newest first (finished ones too)
     items(active, key = { it.id }) { j ->
       SectionCard(borderColor = if (j.state == "error") Bad else null) {
         val p = j.params
@@ -66,6 +66,7 @@ fun ExportsScreen() {
         Hint(when (j.state) {
           "error" -> "Failed: ${j.message}"
           "cancelled" -> "Cancelled"
+          "done" -> "Saved to Movies/Comma Clips${if (j.message.isNotEmpty()) " · ${j.message}" else ""}"
           else -> "${j.phase}${if (j.message.isNotEmpty()) " · ${j.message}" else ""} · ${(j.progress * 100).toInt()}%"
         })
       }

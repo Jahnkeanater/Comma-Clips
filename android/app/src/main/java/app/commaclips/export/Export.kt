@@ -94,6 +94,9 @@ class Cancelled : Exception("cancelled")
 
 @UnstableApi
 class Exporter(private val ctx: Context, private val repo: Repo) {
+  /** Decoder used by the last exact export (shown on the Exports screen to help diagnose device problems). */
+  @Volatile var decoderName: String? = null
+
 
   suspend fun run(job: ExportJob) {
     val p = job.params
@@ -207,13 +210,25 @@ class Exporter(private val ctx: Context, private val repo: Repo) {
     up("Saving", 0.99f)
     val uri = saveToGallery(finalFile, name)
     finalFile.delete()
-    Jobs.update(id) { it.copy(state = "done", phase = "done", progress = 1f, output = uri, name = name, message = "") }
+    Jobs.update(id) { it.copy(state = "done", phase = "done", progress = 1f, output = uri, name = name,
+      message = if (p.fast) "" else "decoder: ${decoderName ?: "?"}") }
   }
 
   private suspend fun transform(item: EditedMediaItem, out: File, bitrate: Int, progress: (Float) -> Unit) =
     withContext(Dispatchers.Main) {
       suspendCancellableCoroutine { cont ->
+        // Decode with Android's software HEVC decoder first: some phones' hardware decoders hand back a padded
+        // buffer (e.g. 1920x1088) without the crop for the comma's 1344x760 picture, which shows up as the
+        // picture shrunk into a corner with grey/garbage around it. The hardware decoder stays as a fallback.
+        val decoders = DefaultDecoderFactory.Builder(ctx)
+          .setMediaCodecSelector(androidx.media3.exoplayer.mediacodec.MediaCodecSelector.PREFER_SOFTWARE)
+          .setEnableDecoderFallback(true)
+          .setListener { name, _ -> decoderName = name }
+          .build()
+        val assets = DefaultAssetLoaderFactory(ctx, decoders, androidx.media3.common.util.Clock.DEFAULT,
+          androidx.media3.exoplayer.source.DefaultMediaSourceFactory(ctx), androidx.media3.datasource.DataSourceBitmapLoader(ctx))
         val transformer = Transformer.Builder(ctx)
+          .setAssetLoaderFactory(assets)
           .setVideoMimeType(MimeTypes.VIDEO_H264)
           .setEncoderFactory(DefaultEncoderFactory.Builder(ctx)
             .setRequestedVideoEncoderSettings(VideoEncoderSettings.Builder().setBitrate(bitrate).build()).build())
