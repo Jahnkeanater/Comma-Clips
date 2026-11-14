@@ -10,8 +10,8 @@ android {
     applicationId = "app.commaclips"
     minSdk = 29
     targetSdk = 36
-    versionCode = 6
-    versionName = "0.3.2"
+    versionCode = 7
+    versionName = "0.3.3"
   }
   buildTypes {
     release {
@@ -21,6 +21,7 @@ android {
     }
   }
   buildFeatures { compose = true }
+  testOptions { unitTests.isReturnDefaultValues = true }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
@@ -50,6 +51,7 @@ dependencies {
   implementation("androidx.media3:media3-transformer:$media3")
   implementation("androidx.media3:media3-effect:$media3")
   implementation("androidx.media3:media3-common:$media3")
+  implementation("androidx.media3:media3-muxer:$media3")
 
   implementation("com.hierynomus:sshj:0.41.2")
   implementation("org.bouncycastle:bcprov-jdk18on:1.83")

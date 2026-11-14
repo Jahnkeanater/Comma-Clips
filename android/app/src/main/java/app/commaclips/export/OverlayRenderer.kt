@@ -54,11 +54,13 @@ class OverlayRenderer(val width: Int, val height: Int, private val wheel: Bitmap
       val sp = s?.let { f0(it.speed * units.speedK) } ?: "--"
       val unit = " " + units.speedU
       val dotSpace = if (on(Element.PEDALS)) fs * 1.3f else 0f
-      lines += Line(big * 1.08f, width(sp, big) + width(unit, fs) + dotSpace) { x, top ->
+      val spW = width(sp, big); val unitW = width(unit, fs)  // measure first: width() changes the text size
+      lines += Line(big * 1.08f, spW + unitW + dotSpace) { x, top ->
         val base = top + big * 0.9f
-        text.color = Color.WHITE; text.textSize = big; c.drawText(sp, x, base, text)
-        text.textSize = fs; c.drawText(unit, x + width(sp, big), base, text)
-        if (on(Element.PEDALS)) pedalDot(c, s, x + width(sp, big) + width(unit, fs) + fs * 0.75f, top + big * 0.62f)
+        text.color = Color.WHITE
+        text.textSize = big; c.drawText(sp, x, base, text)
+        text.textSize = fs; c.drawText(unit, x + spW, base, text)
+        if (on(Element.PEDALS)) pedalDot(c, s, x + spW + unitW + fs * 0.75f, top + big * 0.62f)
       }
     } else if (on(Element.PEDALS)) {
       val label = when (s?.pedal) { 2 -> "brake"; 1 -> "gas"; else -> "" }
