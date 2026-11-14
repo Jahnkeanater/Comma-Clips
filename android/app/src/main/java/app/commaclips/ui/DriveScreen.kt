@@ -115,15 +115,15 @@ fun DriveScreen(repo: Repo, routeName: String, showExports: () -> Unit) {
         layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
       } }, modifier = Modifier.fillMaxSize())
       if (hud) PreviewHud(tel[curSeg], now, units, telErr.value, elements)
-      Surface(onClick = { muted = !muted; prefs.muted = muted; player.volume = if (muted) 0f else 1f },
-        shape = RoundedCornerShape(50), color = Color(0x99000000),
-        modifier = Modifier.align(Alignment.TopCenter).padding(8.dp)) {
-        Text(if (muted) "🔇 Muted" else "🔊 Sound on", color = Color.White, fontSize = 12.sp,
-          modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
-      }
     }
 
     Column(Modifier.padding(16.dp)) {
+      // sound toggle sits under the video so it doesn't cover the picture or the readouts
+      Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Hint("Preview sound", Modifier.weight(1f))
+        FilterChip(selected = !muted, onClick = { muted = !muted; prefs.muted = muted; player.volume = if (muted) 0f else 1f },
+          label = { Text(if (muted) "🔇 Muted" else "🔊 Sound on") })
+      }
       Timeline(route, camera, now, start, end,
         onSeek = { seekRoute(it); now = it },
         onStart = { start = it; if (start >= end) end = start + 1; clampSel() },
@@ -260,7 +260,9 @@ private fun BoxScope.PreviewHud(seg: SegmentTelemetry?, now: Double, units: Unit
   val style = androidx.compose.ui.text.TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 13.sp)
   val box = Modifier.padding(8.dp).background(Color(0x61000000), RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 6.dp)
   if (seg == null) {
-    Text(err ?: "loading telemetry…", style = style, modifier = box.align(Alignment.TopStart)); return
+    Text(err ?: "loading telemetry…", style = style, modifier = box.align(Alignment.TopStart))
+    PreviewGauges(el, Modifier.align(Alignment.TopEnd).padding(8.dp))
+    return
   }
   val n = (now / DevicePaths.SEG_SECONDS).toInt()
   val t = Telemetry(mapOf(seg.seg to seg), listOf(seg.seg), "road")
@@ -297,7 +299,33 @@ private fun BoxScope.PreviewHud(seg: SegmentTelemetry?, now: Double, units: Unit
     if (Element.STEER in el) add("STEER ${signed(s.steer, 0)}°")
     if (Element.GFORCE in el) add("%.2f g".format(kotlin.math.hypot(s.latAccel / 9.81f, s.accel / 9.81f)))
   }
-  if (right.isNotEmpty()) Column(box.align(Alignment.TopEnd), horizontalAlignment = Alignment.End) {
-    for (t in right) Text(t, style = style)
+  Column(Modifier.align(Alignment.TopEnd), horizontalAlignment = Alignment.End) {
+    if (right.isNotEmpty()) Column(box, horizontalAlignment = Alignment.End) {
+      for (t in right) Text(t, style = style)
+    }
+    PreviewGauges(el, Modifier.padding(end = 8.dp, top = if (right.isEmpty()) 8.dp else 0.dp))
+  }
+}
+
+/** Static stand-ins for the g-force dot and steering wheel, so the preview shows where they'll sit in the export. */
+@Composable
+private fun PreviewGauges(el: Set<Element>, modifier: Modifier = Modifier) {
+  if (Element.GFORCE !in el && Element.WHEEL !in el) return
+  val disc = Color(0x61000000)
+  Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    if (Element.GFORCE in el) Canvas(Modifier.size(44.dp)) {
+      val r = size.minDimension / 2
+      drawCircle(disc, r)
+      val inner = r * 0.78f
+      val line = Color(0x6EFFFFFF)
+      drawLine(line, center.copy(x = center.x - inner), center.copy(x = center.x + inner), 1.5f)
+      drawLine(line, center.copy(y = center.y - inner), center.copy(y = center.y + inner), 1.5f)
+      drawCircle(line, inner / 2, style = Stroke(1.5f))
+      drawCircle(Color(0xFF7AE066), r * 0.13f)
+    }
+    if (Element.WHEEL in el) Box(Modifier.size(44.dp).background(disc, androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+      androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(app.commaclips.R.drawable.chffr_wheel), contentDescription = null,
+        modifier = Modifier.size(34.dp))
+    }
   }
 }
