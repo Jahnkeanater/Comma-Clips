@@ -244,7 +244,9 @@ def run_export(job: Job):
         cmd += ["-map", "0:v", "-vf", vf]
       cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", crf, "-pix_fmt", "yuv420p", "-r", str(FPS)]
     if audio_idx is not None:
-      cmd += ["-map", f"{audio_idx}:a", "-c:a", "aac", "-b:a", "96k"]
+      # the comma records 16 kHz mono; some players (e.g. Google Photos) skip audio that unusual, so write
+      # the standard 48 kHz stereo AAC-LC that phones and cameras use
+      cmd += ["-map", f"{audio_idx}:a", "-c:a", "aac", "-profile:a", "aac_low", "-ar", "48000", "-ac", "2", "-b:a", "128k"]
     else:
       cmd += ["-an"]
     cmd += ["-movflags", "+faststart", str(tmp_out)]
