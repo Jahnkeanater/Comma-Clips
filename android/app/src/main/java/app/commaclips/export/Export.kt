@@ -190,19 +190,11 @@ class Exporter(private val ctx: Context, private val repo: Repo) {
       // 4) exact cut, H.264, optional overlay
       check()
       val out = File(work, "$id-out.mp4")
-      // the comma records 16 kHz mono; some players (e.g. Google Photos) skip audio that unusual, so convert
-      // it to the standard 48 kHz stereo that phones and cameras use
-      val audioFx: List<androidx.media3.common.audio.AudioProcessor> = if (mux.hasAudio) listOf(
-        androidx.media3.common.audio.SonicAudioProcessor().apply { setOutputSampleRateHz(48_000) },
-        androidx.media3.common.audio.ChannelMixingAudioProcessor().apply {
-          putChannelMixingMatrix(androidx.media3.common.audio.ChannelMixingMatrix.createForConstantGain(1, 2))
-          putChannelMixingMatrix(androidx.media3.common.audio.ChannelMixingMatrix.createForConstantGain(2, 2))
-        }) else emptyList()
       val effects = if (tel != null) {
         val wheel = BitmapFactory.decodeResource(ctx.resources, R.drawable.chffr_wheel)
         val overlay = TelemetryOverlay(OverlayRenderer(mux.width, mux.height, wheel, p.units, p.elements), tel, mux.firstFrame, clipStartUs)
-        Effects(audioFx, listOf(OverlayEffect(ImmutableList.of<androidx.media3.effect.TextureOverlay>(overlay))))
-      } else Effects(audioFx, emptyList())
+        Effects(emptyList(), listOf(OverlayEffect(ImmutableList.of<androidx.media3.effect.TextureOverlay>(overlay))))
+      } else Effects.EMPTY
       val item = MediaItem.Builder().setUri(Uri.fromFile(joined))
         .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder()
           .setStartPositionUs(clipStartUs).setEndPositionUs(clipEndUs).build())
@@ -238,7 +230,6 @@ class Exporter(private val ctx: Context, private val repo: Repo) {
         val transformer = Transformer.Builder(ctx)
           .setAssetLoaderFactory(assets)
           .setVideoMimeType(MimeTypes.VIDEO_H264)
-          .setAudioMimeType(MimeTypes.AUDIO_AAC)
           .setEncoderFactory(DefaultEncoderFactory.Builder(ctx)
             .setRequestedVideoEncoderSettings(VideoEncoderSettings.Builder().setBitrate(bitrate).build()).build())
           .addListener(object : Transformer.Listener {
