@@ -10,8 +10,8 @@ android {
     applicationId = "app.commaclips"
     minSdk = 29
     targetSdk = 36
-    versionCode = 10
-    versionName = "0.3.6"
+    versionCode = 11
+    versionName = "0.3.7"
   }
   buildTypes {
     release {

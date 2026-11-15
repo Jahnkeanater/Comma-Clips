@@ -93,7 +93,7 @@ object HevcMuxer {
           val outUs = k * SEG_US + rel - clipStartUs           // position in the clip
           if (rel in 0 until SEG_US && outUs in 0 until durationUs) {
             val data = ByteArray(n); buf.position(0); buf.get(data, 0, n)
-            samples.add(Mp4Join.AudioSample(data, outUs, ex.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0))
+            samples.add(Mp4Join.AudioSample(AudioResample.stripAdts(data), outUs, ex.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0))
           }
           buf.clear()
           ex.advance()

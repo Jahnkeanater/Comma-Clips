@@ -20,6 +20,9 @@ object AudioConvert {
   fun toStereo48k(frames: List<Mp4Join.AudioSample>, csd: ByteArray, inRate: Int, inChannels: Int,
                   durationUs: Long, cancelled: () -> Boolean = { false }): List<Mp4Join.AudioSample> {
     val chunks = decode(frames, csd, inRate, inChannels, cancelled)
+    // nothing decoded, or only digital silence, means the decoder couldn't read the frames: let the caller
+    // fall back to the original audio instead of writing a silent track
+    require(chunks.any { c -> c.second.any { it.toInt() != 0 } }) { "audio decoded to silence" }
     val mono = AudioResample.place(chunks, inRate, durationUs)
     val stereo = AudioResample.monoToStereo(mono, inRate)
     return encode(stereo, cancelled)

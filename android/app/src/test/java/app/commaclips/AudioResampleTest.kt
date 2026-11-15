@@ -32,6 +32,22 @@ class AudioResampleTest {
     assertEquals(1000.toShort(), out[800]); assertEquals(1000.toShort(), out[959])
   }
 
+  @Test fun stripsAdtsHeadersFromRealFrames() {
+    val f = System.getenv("COMMA_TEST_ADTS")?.let { java.io.File(it) }
+    org.junit.Assume.assumeTrue(f?.exists() == true)
+    val b = f!!.readBytes(); var i = 0; var n = 0
+    while (i + 7 <= b.size) {
+      val len = ((b[i + 3].toInt() and 3) shl 11) or ((b[i + 4].toInt() and 0xff) shl 3) or ((b[i + 5].toInt() and 0xff) ushr 5)
+      val frame = b.copyOfRange(i, i + len)
+      val raw = AudioResample.stripAdts(frame)
+      assertEquals(len - 7, raw.size)
+      assertEquals(raw.size, AudioResample.stripAdts(raw).size.coerceAtLeast(raw.size))  // bare frames are left alone
+      i += len; n++
+    }
+    println("stripped $n real comma ADTS frames")
+    assertTrue(n > 900)
+  }
+
   @Test fun aacConfigIsLc48kStereo() {
     val c = AudioResample.AAC_LC_48K_STEREO_CONFIG
     val bits = ((c[0].toInt() and 0xff) shl 8) or (c[1].toInt() and 0xff)
