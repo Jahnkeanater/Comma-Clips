@@ -5,6 +5,7 @@ import android.media.MediaFormat
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
+import app.commaclips.core.AudioResample
 import app.commaclips.core.DevicePaths
 import app.commaclips.core.Mp4Join
 import java.io.File
@@ -23,9 +24,21 @@ object HevcMuxer {
   fun mux(files: List<File>, fromFrame: Int, toFrame: Int, out: File,
           audio: List<File?> = emptyList(),  // preview file per segment (same order as files), or null
           progress: (Float) -> Unit = {}, cancelled: () -> Boolean = { false }): Mp4Join.Result {
-    val format = audio.firstNotNullOfOrNull { f -> f?.let { audioFormat(it) } }
-    return Mp4Join.join(files, fromFrame, toFrame, out, format,
-      audio = { start, dur -> collectAudio(audio, start, dur) }, progress = progress, cancelled = cancelled)
+    val source = audio.firstNotNullOfOrNull { f -> f?.let { audioFormat(it) } }
+    return Mp4Join.join(files, fromFrame, toFrame, out, audio = audio@{ start, dur ->
+      if (source == null) return@audio null
+      val raw = collectAudio(audio, start, dur)
+      if (raw.isEmpty()) return@audio null
+      // Re-encode to standard 48 kHz stereo (Google Photos won't play the comma's 16 kHz mono);
+      // if the phone can't, keep the original rather than lose the audio.
+      runCatching {
+        val converted = AudioConvert.toStereo48k(raw, source.initializationData[0], source.sampleRate, source.channelCount, dur, cancelled)
+        require(converted.isNotEmpty())
+        Format.Builder().setSampleMimeType(MimeTypes.AUDIO_AAC).setSampleRate(AudioResample.OUT_RATE)
+          .setChannelCount(AudioResample.OUT_CHANNELS).setAverageBitrate(128_000)
+          .setInitializationData(listOf(AudioResample.AAC_LC_48K_STEREO_CONFIG)).build() to converted
+      }.getOrElse { if (it is InterruptedException) throw it; source to raw }
+    }, progress = progress, cancelled = cancelled)
   }
 
   private fun audioTrack(ex: MediaExtractor): Pair<Int, Int> {

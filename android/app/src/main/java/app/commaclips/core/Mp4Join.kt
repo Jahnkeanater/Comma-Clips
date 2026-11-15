@@ -29,7 +29,7 @@ object Mp4Join {
    * before it. Audio samples must already be on the output timeline (0 = first written frame) and sorted.
    */
   fun join(files: List<File>, fromFrame: Int, toFrame: Int, out: File,
-           audioFormat: Format? = null, audio: (startFrame: Int, durationUs: Long) -> List<AudioSample> = { _, _ -> emptyList() },
+           audio: (startFrame: Int, durationUs: Long) -> Pair<Format, List<AudioSample>>? = { _, _ -> null },
            progress: (Float) -> Unit = {}, cancelled: () -> Boolean = { false }): Result {
     require(files.isNotEmpty())
     val first = files[0].readBytes()
@@ -39,7 +39,7 @@ object Mp4Join {
     var start = fromFrame.coerceIn(0, firstAus.size - 1)
     while (start > 0 && !firstAus[start].key) start--
     val durationUs = (toFrame - start) * FRAME_US
-    val audioSamples = if (audioFormat != null) audio(start, durationUs) else emptyList()
+    val (audioFormat, audioSamples) = audio(start, durationUs) ?: (null to emptyList())
 
     out.delete()
     val muxer = Mp4Muxer.Builder(FileOutputStream(out)).build()
